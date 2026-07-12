@@ -29,29 +29,58 @@
 </div>
 <script>
   // Login relay: SpacetimeAuth can only redirect to https:// URLs, so this
-  // page forwards the OAuth result to the game's custom scheme. It only
-  // passes the query through — the authorization code is single-use and
-  // useless without the PKCE verifier that never leaves the game.
+  // page hands the OAuth result to the game two ways at once:
+  //  1. CLIPBOARD (primary): the button copies "midtale-login:<code>:<state>"
+  //     and the game reads it when the player returns.
+  //  2. Custom scheme midtale:// (bonus): reopens the game where the OS
+  //     supports it. Harmless where it doesn't.
+  // No secrets live here — the code is single-use and useless without the
+  // PKCE verifier that never leaves the game.
   (function () {
     var target = "midtale://callback" + window.location.search;
+    var qs = new URLSearchParams(window.location.search);
+    var code = qs.get("code");
+    var state = qs.get("state");
+    var msg = document.getElementById("msg");
     var btn = document.getElementById("open");
-    btn.href = target;           // attribute assignment only — nothing from the URL is rendered
-    btn.style.display = "inline-block";
-    if (window.location.search.length > 1) {
-      document.getElementById("msg").textContent =
-        "Sign-in complete. Tap the button if the game doesn't reopen by itself.";
-      var hop = function () { window.location.href = target; };
-      hop();   // auto-hop; blocked in background tabs, so also…
-      // …retry whenever this tab becomes visible (Safari buries the original
-      // sign-in tab behind the email-verification tab; the moment the player
-      // surfaces it, jump to the game without needing the tap).
-      document.addEventListener("visibilitychange", function () {
-        if (!document.hidden) hop();
-      });
-    } else {
-      document.getElementById("msg").textContent =
-        "Nothing to forward — open this page from the sign-in email flow.";
+
+    if (!code || !state) {
+      msg.textContent = "Nothing to forward — open this page from the sign-in flow.";
+      return;
     }
+
+    var payload = "midtale-login:" + code + ":" + state;
+    var copyCode = function () {
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(payload);
+        } else {
+          var ta = document.createElement("textarea");
+          ta.value = payload;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand("copy");
+          document.body.removeChild(ta);
+        }
+        return true;
+      } catch (e) { return false; }
+    };
+
+    msg.textContent = "Sign-in approved! Tap the button, then return to the game.";
+    btn.style.display = "inline-block";
+    btn.href = "#";
+    btn.addEventListener("click", function (ev) {
+      ev.preventDefault();
+      copyCode();                      // needs this user gesture
+      msg.textContent = "Code copied — now switch back to MidTale.";
+      window.location.href = target;   // bonus: reopen directly where schemes work
+    });
+
+    // Opportunistic scheme hop for platforms where it works; the clipboard
+    // path still needs the tap, so the button stays front and center.
+    document.addEventListener("visibilitychange", function () {
+      if (!document.hidden) { window.location.href = target; }
+    });
   })();
 </script>
 </body>
