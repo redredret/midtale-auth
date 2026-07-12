@@ -40,7 +40,14 @@
     if (window.location.search.length > 1) {
       document.getElementById("msg").textContent =
         "Sign-in complete. Tap the button if the game doesn't reopen by itself.";
-      window.location.href = target;   // auto-hop; some browsers require the tap instead
+      var hop = function () { window.location.href = target; };
+      hop();   // auto-hop; blocked in background tabs, so also…
+      // …retry whenever this tab becomes visible (Safari buries the original
+      // sign-in tab behind the email-verification tab; the moment the player
+      // surfaces it, jump to the game without needing the tap).
+      document.addEventListener("visibilitychange", function () {
+        if (!document.hidden) hop();
+      });
     } else {
       document.getElementById("msg").textContent =
         "Nothing to forward — open this page from the sign-in email flow.";
