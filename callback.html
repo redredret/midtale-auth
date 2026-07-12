@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>MidTale — Returning to game…</title>
+<style>
+  body {
+    margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: #0b0d14; color: #ccccdd; font-family: system-ui, sans-serif; text-align: center;
+  }
+  .card { padding: 2.5rem 2rem; max-width: 22rem; }
+  h1 { color: #f2d97a; font-size: 1.6rem; margin: 0 0 0.75rem; }
+  p { font-size: 0.95rem; line-height: 1.5; margin: 0.5rem 0 1.5rem; opacity: 0.85; }
+  a.btn {
+    display: inline-block; padding: 0.9rem 2rem; border-radius: 10px; text-decoration: none;
+    background: #4fa8e3; color: #06111c; font-weight: 600; font-size: 1.05rem;
+  }
+  .hint { font-size: 0.8rem; opacity: 0.55; margin-top: 1.5rem; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>MidTale</h1>
+  <p id="msg">Finishing sign-in…</p>
+  <a id="open" class="btn" href="#" style="display:none">Return to MidTale</a>
+  <p class="hint">You can close this tab once the game reopens.</p>
+</div>
+<script>
+  // Login relay: SpacetimeAuth can only redirect to https:// URLs, so this
+  // page forwards the OAuth result to the game's custom scheme. It only
+  // passes the query through — the authorization code is single-use and
+  // useless without the PKCE verifier that never leaves the game.
+  (function () {
+    var target = "midtale://callback" + window.location.search;
+    var btn = document.getElementById("open");
+    btn.href = target;           // attribute assignment only — nothing from the URL is rendered
+    btn.style.display = "inline-block";
+    if (window.location.search.length > 1) {
+      document.getElementById("msg").textContent =
+        "Sign-in complete. Tap the button if the game doesn't reopen by itself.";
+      window.location.href = target;   // auto-hop; some browsers require the tap instead
+    } else {
+      document.getElementById("msg").textContent =
+        "Nothing to forward — open this page from the sign-in email flow.";
+    }
+  })();
+</script>
+</body>
+</html>
