@@ -25,17 +25,26 @@
   <h1>MidTale</h1>
   <p id="msg">Finishing sign-in…</p>
   <a id="open" class="btn" href="#" style="display:none">Return to MidTale</a>
-  <p class="hint">You can close this tab once the game reopens.</p>
+  <p class="hint" id="hint">You can close this tab once the game reopens.</p>
 </div>
 <script>
   // Login relay: SpacetimeAuth can only redirect to https:// URLs, so this
   // page hands the OAuth result to the game two ways at once:
-  //  1. CLIPBOARD (primary): the button copies "midtale-login:<code>:<state>"
-  //     and the game reads it when the player returns.
-  //  2. Custom scheme midtale:// (bonus): reopens the game where the OS
-  //     supports it. Harmless where it doesn't.
+  //  1. CLIPBOARD (primary): copied "midtale-login:<code>:<state>"; the game
+  //     reads it when the player returns (iOS shows its paste banner).
+  //  2. Custom scheme midtale://: reopens the game where the OS allows it.
   // No secrets live here — the code is single-use and useless without the
   // PKCE verifier that never leaves the game.
+  //
+  // HARD-WON iOS RULES (the old page failed all three):
+  //  * navigator.clipboard.writeText is ASYNC — navigating to the custom
+  //    scheme in the same tick CANCELS the pending write. Always settle the
+  //    copy BEFORE the scheme hop.
+  //  * execCommand('copy') is SYNCHRONOUS and reliable **under a user
+  //    gesture** — do it first, use the async API only as a second belt.
+  //  * NO automatic re-hop on visibilitychange: it re-triggered the "Open
+  //    in MidTale?" dialog every time the player glanced back at the tab
+  //    and made the flow feel haunted.
   (function () {
     var target = "midtale://callback" + window.location.search;
     var qs = new URLSearchParams(window.location.search);
@@ -43,6 +52,7 @@
     var state = qs.get("state");
     var msg = document.getElementById("msg");
     var btn = document.getElementById("open");
+    var hint = document.getElementById("hint");
 
     if (!code || !state) {
       msg.textContent = "Nothing to forward — open this page from the sign-in flow.";
@@ -50,37 +60,51 @@
     }
 
     var payload = "midtale-login:" + code + ":" + state;
-    var copyCode = function () {
+
+    // Synchronous, gesture-bound copy — the reliable iOS path.
+    var copySync = function () {
       try {
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(payload);
-        } else {
-          var ta = document.createElement("textarea");
-          ta.value = payload;
-          document.body.appendChild(ta);
-          ta.select();
-          document.execCommand("copy");
-          document.body.removeChild(ta);
-        }
-        return true;
+        var ta = document.createElement("textarea");
+        ta.value = payload;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        ta.setSelectionRange(0, payload.length);
+        var ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+        return ok;
       } catch (e) { return false; }
     };
 
-    msg.textContent = "Sign-in approved! Tap the button, then return to the game.";
+    msg.textContent = "Sign-in approved! Tap the button to head back into the game.";
     btn.style.display = "inline-block";
     btn.href = "#";
     btn.addEventListener("click", function (ev) {
       ev.preventDefault();
-      copyCode();                      // needs this user gesture
-      msg.textContent = "Code copied — now switch back to MidTale.";
-      window.location.href = target;   // bonus: reopen directly where schemes work
+      var okSync = copySync();
+      msg.textContent = "Code copied — returning to MidTale…";
+      hint.textContent = "If the game doesn't open, just switch back to it yourself.";
+      var navigated = false;
+      var nav = function () {
+        if (navigated) return;
+        navigated = true;
+        window.location.href = target;
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        // Belt over the sync copy; NAVIGATE ONLY AFTER IT SETTLES.
+        navigator.clipboard.writeText(payload).then(nav, nav);
+        setTimeout(nav, 700);   // promise hung? go anyway — sync copy stands
+      } else {
+        setTimeout(nav, okSync ? 120 : 400);
+      }
     });
 
-    // Opportunistic scheme hop for platforms where it works; the clipboard
-    // path still needs the tap, so the button stays front and center.
-    document.addEventListener("visibilitychange", function () {
-      if (!document.hidden) { window.location.href = target; }
-    });
+    // Zero-tap attempt: some platforms honor a scheme hop on load (iOS then
+    // shows its own "Open in MidTale?" dialog immediately). If it's blocked,
+    // nothing happens and the button remains — but NO retriggering loop.
+    setTimeout(function () { try { window.location.href = target; } catch (e) {} }, 350);
   })();
 </script>
 </body>
